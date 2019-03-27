@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Talking Player</string>
+    <string name="magnetometer">Magnetometer</string>
+    <string name="unit_magnetic_field">μT</string>
+    <string name="gyroscope">Gyroscope</string>
+    <string name="unit_gyroscope">rad/s</string>
+    <string name="unit_orientation">deegres</string>
+    <string name="orientation">Orientation</string>
+    <string name="unit_accelerometer">m/s^2</string>
+    <string name="accelerometer">Accelerometer</string>
+</resources>
