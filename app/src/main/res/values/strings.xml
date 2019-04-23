@@ -8,4 +8,5 @@
     <string name="orientation">Orientation</string>
     <string name="unit_accelerometer">m/s^2</string>
     <string name="accelerometer">Accelerometer</string>
+    <string name="title_activity_sphere_renderer">SphereRenderer</string>
 </resources>

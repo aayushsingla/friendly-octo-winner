@@ -1,5 +1,6 @@
 package com.example.talkingplayer;
 
+import android.content.Intent;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -172,5 +173,8 @@ public class SensorsActivity extends AppCompatActivity implements SensorEventLis
     @Override
     public void onClick(View view) {
         //start Another Activity
+//       startActivity(new Intent(this, CubeActivity.class));
+        startActivity(new Intent(this, SphereActivity.class));
+        finish();
     }
 }
