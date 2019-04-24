@@ -31,7 +31,7 @@ public class SphereActivity extends Activity {
             // Request an OpenGL ES 2.0 compatible context.
             glSurfaceView.setEGLContextClientVersion(2);
             // Set the renderer to our demo renderer, defined below.
-            glSurfaceView.setRenderer(new SphereRenderer());
+            glSurfaceView.setRenderer(new SphereRenderer(this));
         }
 
         setContentView(glSurfaceView);
