@@ -48,7 +48,7 @@ public class CubeActivityRenderer implements GLSurfaceView.Renderer {
 
         // Create a rotation transformation for the triangle
         long time = SystemClock.uptimeMillis() % 4000L;
-        Matrix.setRotateM(rotationMatrix, 0, mAngle, 0, 0, -1.0f);
+        Matrix.setRotateM(rotationMatrix, 0, mAngle, 0, 0, 0.0f);
 
         // Set the camera position (View matrix)
         Matrix.setLookAtM(viewMatrix, 0, 0, 0, -3, 0f, 0f, 0f, 0f, 1.0f, 0.0f);

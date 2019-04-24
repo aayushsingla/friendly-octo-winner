@@ -121,7 +121,7 @@ public class SphereBox {
         }
 
         for (int i = 0; i < coordinateData.length; i++) {
-            normalData[i] = -1.0f * coordinateData[i];
+            normalData[i] = 1.0f * coordinateData[i];
         }
 
         //generating texture data

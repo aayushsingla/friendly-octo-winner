@@ -99,7 +99,9 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
     private float[] mMVPMatrix = new float[16];
     private float[] mMVMatrix = new float[16];
     private float[] lightSourcePosition = new float[3];
-
+    private volatile float mAngle;
+    private volatile float mScaleFactor = 1.0f;
+    private float ratio;
     private SphereBox sphereBox;
 
     public SphereRenderer(Context context) {
@@ -184,28 +186,7 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
 
         // Create a new perspective projection matrix. The height will stay the same
         // while the width will vary as per aspect ratio.
-        final float ratio = (float) width / height;
-        if (ratio > 1) {
-            final float left = -ratio;
-            final float right = ratio;
-            final float bottom = -1.0f;
-            final float top = 1.0f;
-            final float near = 1.0f;
-            final float far = 10.0f;
-            Matrix.frustumM(mProjectionMatrix, 0, left, right, bottom, top, near, far);
-        } else {
-            final float bottom = -(1 / ratio);
-            final float top = 1 / ratio;
-            final float left = -1.0f;
-            final float right = 1.0f;
-            final float near = 1.0f;
-            final float far = 10.0f;
-            Matrix.frustumM(mProjectionMatrix, 0, left, right, bottom, top, near, far);
-
-        }
-        checkGLError("Projection Matrix Setup");
-        setUpViewMatrix();
-        checkGLError("View Matrix Setup");
+        ratio = (float) width / height;
 
     }
 
@@ -215,6 +196,8 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
 
 //         Bind Attributes
 
+        setUpViewMatrix();
+        checkGLError("View Matrix Setup");
 
         GLES20.glGenBuffers(1, vertexBuffers, 0);
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vertexBuffers[0]);
@@ -276,6 +259,27 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
     }
 
     private void setUpViewMatrix() {
+        if (ratio > 1) {
+            final float left = -ratio / mScaleFactor;
+            final float right = ratio / mScaleFactor;
+            final float bottom = -1.0f / mScaleFactor;
+            final float top = 1.0f / mScaleFactor;
+            final float near = 1.0f;
+            final float far = 10.0f;
+            Matrix.frustumM(mProjectionMatrix, 0, left, right, bottom, top, near, far);
+        } else {
+            final float top = 1 / (ratio * mScaleFactor);
+            final float bottom = -1 * (top);
+            final float left = -1.0f / mScaleFactor;
+            final float right = 1.0f / mScaleFactor;
+            final float near = 1.0f;
+            final float far = 10.0f;
+            Matrix.frustumM(mProjectionMatrix, 0, left, right, bottom, top, near, far);
+
+        }
+        checkGLError("Projection Matrix Setup");
+
+
         // Position the eye behind the origin.
         final float eyeX = 0.0f;
         final float eyeY = 0.0f;
@@ -291,6 +295,7 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
 
         Matrix.setLookAtM(mViewMatrix, 0, eyeX, eyeY, eyeZ, lookX, lookY, lookZ, upX, upY, upZ);
         Matrix.setIdentityM(mModelMatrix, 0);
+        Matrix.setRotateM(mModelMatrix, 0, mAngle, 0.0f, 1.0f, 0.0f);
         Matrix.multiplyMM(mMVMatrix, 0, mViewMatrix, 0, mModelMatrix, 0);
 
         // This multiplies the modelview matrix by the projection matrix, and stores the result in the MVP matrix
@@ -402,5 +407,17 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
         else {
             Log.e("TAG", where + ": " + errorCode + GLU.gluErrorString(errorCode));
         }
+    }
+
+    public float getAngle() {
+        return mAngle;
+    }
+
+    public void setAngle(float mAngle) {
+        this.mAngle = mAngle;
+    }
+
+    public void setZoom(float mScaleFactor) {
+        this.mScaleFactor = mScaleFactor;
     }
 }

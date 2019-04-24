@@ -14,25 +14,14 @@ import butterknife.BindView;
 import butterknife.ButterKnife;
 
 public class SphereActivity extends Activity {
-    private GLSurfaceView glSurfaceView;
+    private GLSurfaceViewSphere glSurfaceView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sphere);
         ButterKnife.bind(this);
-        glSurfaceView = new GLSurfaceView(this);
-
-        final ActivityManager activityManager = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-        final ConfigurationInfo configurationInfo = activityManager.getDeviceConfigurationInfo();
-        final boolean supportsEs2 = configurationInfo.reqGlEsVersion >= 0x20000;
-
-        if (supportsEs2) {
-            // Request an OpenGL ES 2.0 compatible context.
-            glSurfaceView.setEGLContextClientVersion(2);
-            // Set the renderer to our demo renderer, defined below.
-            glSurfaceView.setRenderer(new SphereRenderer(this));
-        }
+        glSurfaceView = new GLSurfaceViewSphere(this);
 
         setContentView(glSurfaceView);
 
