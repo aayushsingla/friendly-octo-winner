@@ -14,12 +14,8 @@ import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
 public class SphereRenderer implements GLSurfaceView.Renderer {
-    public final int[] vertexBuffers = new int[2];
-    public final int[] indexBuffers = new int[2];
-    public final int[] normalBuffers = new int[2];
-    public final int[] colorBuffers = new int[2];
-    public final int[] textureBuffers = new int[2];
-
+    private final static String TAG = SphereRenderer.class.getSimpleName();
+    private final int[] bufferIds = new int[5];
     final String fragmentShader =
             "precision mediump float;       \n"        // Set the default precision to medium. We don't need as high of a
                     // precision in the fragment shader.
@@ -75,32 +71,10 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
                     + "   v_TexCoordinate = a_TexCoordinate;                      \n"
                     + "}                                                          \n";
 
-    private final int mBytesPerFloat = 4;
-    private final int mStrideBytes = 3 * mBytesPerFloat;
-    private final int mPositionOffset = 0;
-    private final int mPositionDataSize = 3;
-    private final int mColorOffset = 3;
-    private final int mColorDataSize = 4;
     public Context context;
-    private int vertexShaderHandle;
-    private int fragmentShaderHandle;
-    private int programHandle;
-    private int mMVPMatrixHandle;
-    private int mMVMatrixHandle;
-    private int mPositionHandle;
-    private int mColorHandle;
-    private int mTextureHandle;
-    private int mSphereTextureDataHandle;
-    private int mSkyTextureDataHandle;
-    private int mUniformTextureHandle;
-    private int mNormalHandle;
-    private int mLightPosHandle;
     private float[] mProjectionMatrix = new float[16];
     private float[] mModelMatrix = new float[16];
     private float[] mViewMatrix = new float[16];
-    private float[] mMVPMatrix = new float[16];
-    private float[] mMVMatrix = new float[16];
-    private float[] lightSourcePosition = new float[3];
     private volatile float mAngle;
     private volatile float mScaleFactor = 1.0f;
     private float ratio;
@@ -108,10 +82,6 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
     private NightSky nightSky;
 
     public SphereRenderer(Context context) {
-        lightSourcePosition[0] = 0.0f;
-        lightSourcePosition[1] = 0.0f;
-        lightSourcePosition[2] = 0.0f;
-
         this.context = context;
     }
 
@@ -159,40 +129,117 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
 
     }
 
+    public static int loadVertexShader(String vertexShader) {
+        // Load in the vertex shader.
+        int mVertexShaderHandle = GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER);
+
+        if (mVertexShaderHandle != 0) {
+            // Pass in the shader source.
+            GLES20.glShaderSource(mVertexShaderHandle, vertexShader);
+
+            // Compile the shader.
+            GLES20.glCompileShader(mVertexShaderHandle);
+
+            // Get the compilation status.
+            final int[] compileStatus = new int[1];
+            GLES20.glGetShaderiv(mVertexShaderHandle, GLES20.GL_COMPILE_STATUS, compileStatus, 0);
+
+            // If the compilation failed, delete the shader.
+            if (compileStatus[0] == 0) {
+                GLES20.glDeleteShader(mVertexShaderHandle);
+                mVertexShaderHandle = 0;
+
+            }
+
+            if (mVertexShaderHandle == 0) {
+                throw new RuntimeException("Error creating vertex shader.");
+            }
+        }
+        return mVertexShaderHandle;
+    }
+
+    public static int loadFragmentShader(String fragmentShader) {
+        // Load in the vertex shader.
+        int mFragmentShaderHandle = GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER);
+
+        if (mFragmentShaderHandle != 0) {
+            // Pass in the shader source.
+            GLES20.glShaderSource(mFragmentShaderHandle, fragmentShader);
+
+            // Compile the shader.
+            GLES20.glCompileShader(mFragmentShaderHandle);
+
+            // Get the compilation status.
+            final int[] compileStatus = new int[1];
+            GLES20.glGetShaderiv(mFragmentShaderHandle, GLES20.GL_COMPILE_STATUS, compileStatus, 0);
+
+            // If the compilation failed, delete the shader.
+            if (compileStatus[0] == 0) {
+                GLES20.glDeleteShader(mFragmentShaderHandle);
+                mFragmentShaderHandle = 0;
+            }
+        }
+
+        if (mFragmentShaderHandle == 0) {
+            throw new RuntimeException("Error creating fragment shader.");
+        }
+        return mFragmentShaderHandle;
+    }
+
+    public static int linkVertexAndFragmentShaders(int mVertexShaderHandle, int mFragmentShaderHandle) {
+        // Create a program object and store the handle to it.
+        int mProgramHandle = GLES20.glCreateProgram();
+
+        if (mProgramHandle != 0) {
+            // Bind the vertex shader to the program.
+            GLES20.glAttachShader(mProgramHandle, mVertexShaderHandle);
+
+            // Bind the fragment shader to the program.
+            GLES20.glAttachShader(mProgramHandle, mFragmentShaderHandle);
+
+            // Bind attributes
+            GLES20.glBindAttribLocation(mProgramHandle, 0, "a_Position");
+            GLES20.glBindAttribLocation(mProgramHandle, 1, "a_Color");
+            GLES20.glBindAttribLocation(mProgramHandle, 2, "a_Normal");
+            GLES20.glBindAttribLocation(mProgramHandle, 3, "a_TexCoordinate");
+
+            // Link the two shaders together into a program.
+            GLES20.glLinkProgram(mProgramHandle);
+
+            // Get the link status.
+            final int[] linkStatus = new int[1];
+            GLES20.glGetProgramiv(mProgramHandle, GLES20.GL_LINK_STATUS, linkStatus, 0);
+
+            // If the link failed, delete the program.
+            if (linkStatus[0] == 0) {
+                GLES20.glDeleteProgram(mProgramHandle);
+                mProgramHandle = 0;
+            }
+        }
+
+        if (mProgramHandle == 0) {
+            throw new RuntimeException("Error creating program.");
+        }
+        return mProgramHandle;
+    }
+
+    public static void checkGLError(String TAG, String where) {
+        int errorCode = GLES20.glGetError();
+        if (errorCode == 0)
+            Log.d(TAG, where + ": " + errorCode);
+        else {
+            Log.e(TAG, where + ": " + errorCode + GLU.gluErrorString(errorCode));
+        }
+    }
+
     @Override
     public void onSurfaceCreated(GL10 gl10, EGLConfig eglConfig) {
         GLES20.glEnable(GLES20.GL_DITHER);
         GLES20.glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         GLES20.glEnable(GLES20.GL_DEPTH_TEST);
-        sphereBox = new SphereBox();
-        nightSky = new NightSky();
-
-        loadVertexShader();
-        checkGLError("Vertex Shader Attached");
-
-        loadFragmentShader();
-        checkGLError("Fragment Shader Attached");
-
-        linkVertexAndFragmentShaders();
-        checkGLError("Shaders Linked");
-
-
-        // Set program handles. These will later be used to pass in values to the program.
-        mMVPMatrixHandle = GLES20.glGetUniformLocation(programHandle, "u_MVPMatrix");
-        mMVMatrixHandle = GLES20.glGetUniformLocation(programHandle, "u_MVMatrix");
-        mPositionHandle = GLES20.glGetAttribLocation(programHandle, "a_Position");
-        mColorHandle = GLES20.glGetAttribLocation(programHandle, "a_Color");
-        mTextureHandle = GLES20.glGetAttribLocation(programHandle, "a_TexCoordinate");
-        mUniformTextureHandle = GLES20.glGetUniformLocation(programHandle, "u_Texture");
-        mNormalHandle = GLES20.glGetAttribLocation(programHandle, "a_Normal");
-        mLightPosHandle = GLES20.glGetUniformLocation(programHandle, "u_LightPos");
-        checkGLError("Handles Created");
-        mSphereTextureDataHandle = loadTexture(context, R.drawable.texture);
-        mSkyTextureDataHandle = loadTexture(context, R.drawable.night_sky);
-        checkGLError("Texture Loaded");
-        // Tell OpenGL to use this program when rendering.
-        GLES20.glUseProgram(programHandle);
-
+        nightSky = new NightSky(context, vertexShader, fragmentShader);
+        sphereBox = new SphereBox(context, vertexShader, fragmentShader);
+        checkGLError(TAG, "initiation sphere box");
     }
 
     @Override
@@ -201,242 +248,9 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
 
 //         Bind Attributes
         setUpViewMatrix();
-        checkGLError("View Matrix Setup");
-        drawNightSky();
-        drawPlanet();
-    }
-
-    private void drawNightSky() {
-        GLES20.glGenBuffers(1, vertexBuffers, 1);
-        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vertexBuffers[1]);
-        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, nightSky.coordinateDataBuffer.capacity() * 4,
-                nightSky.coordinateDataBuffer, GLES20.GL_STATIC_DRAW);
-        checkGLError("Vertex Buffer Binded");
-        GLES20.glVertexAttribPointer(mPositionHandle, mPositionDataSize, GLES20.GL_FLOAT,
-                false, mStrideBytes, 0);
-        GLES20.glEnableVertexAttribArray(mPositionHandle);
-        checkGLError("position Handle enabled");
-
-
-        // Set the active texture unit to texture unit 0.
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        // Bind the texture to this unit.
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mSkyTextureDataHandle);
-        // Tell the texture uniform sampler to use this texture in the shader by binding to texture unit 0.
-        GLES20.glUniform1i(mUniformTextureHandle, 0);
-
-
-        GLES20.glGenBuffers(1, textureBuffers, 1);
-        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, textureBuffers[1]);
-        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, nightSky.textureDataBuffer.capacity() * 4,
-                nightSky.textureDataBuffer, GLES20.GL_STATIC_DRAW);
-        GLES20.glVertexAttribPointer(mTextureHandle, 2,
-                GLES20.GL_FLOAT, false, 8, 0);
-        GLES20.glEnableVertexAttribArray(mTextureHandle);
-        checkGLError("texture Handle Enabled");
-
-        GLES20.glGenBuffers(1, normalBuffers, 1);
-        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, normalBuffers[1]);
-        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, nightSky.normalDataBuffer.capacity() * 4,
-                nightSky.normalDataBuffer, GLES20.GL_STATIC_DRAW);
-        checkGLError("Normal Buffer Binded");
-        GLES20.glVertexAttribPointer(mNormalHandle, mPositionDataSize, GLES20.GL_FLOAT,
-                false, mStrideBytes, 0);
-        GLES20.glEnableVertexAttribArray(mNormalHandle);
-        checkGLError("Normal Handle enabled");
-
-        GLES20.glGenBuffers(1, colorBuffers, 1);
-        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, colorBuffers[1]);
-        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, nightSky.colorDataBuffer.capacity() * 4,
-                nightSky.colorDataBuffer, GLES20.GL_STATIC_DRAW);
-        checkGLError("Color Buffer Binded");
-        GLES20.glVertexAttribPointer(mColorHandle, mColorDataSize, GLES20.GL_FLOAT,
-                false, 16, 0);
-        GLES20.glEnableVertexAttribArray(mColorHandle);
-        checkGLError("color Handle enabled");
-
-
-        //Draw
-        GLES20.glGenBuffers(1, indexBuffers, 1);
-        GLES20.glBindBuffer(GLES20.GL_ELEMENT_ARRAY_BUFFER, indexBuffers[1]);
-        GLES20.glBufferData(GLES20.GL_ELEMENT_ARRAY_BUFFER, nightSky.indicesDataBuffer.capacity() * 2,
-                nightSky.indicesDataBuffer, GLES20.GL_STATIC_DRAW);
-        GLES20.glDrawElements(GLES20.GL_TRIANGLE_STRIP, nightSky.indicesDataBuffer.capacity(),
-                GLES20.GL_UNSIGNED_SHORT, 0);
-        checkGLError("Night Sky Drawn");
-
-        GLES20.glDisableVertexAttribArray(mTextureHandle);
-        GLES20.glDisableVertexAttribArray(mColorHandle);
-        GLES20.glDisableVertexAttribArray(mNormalHandle);
-        GLES20.glDisableVertexAttribArray(mPositionHandle);
-    }
-
-    private void drawPlanet() {
-        GLES20.glGenBuffers(1, vertexBuffers, 0);
-        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vertexBuffers[0]);
-        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, sphereBox.vertexDataBuffer.capacity() * 4,
-                sphereBox.vertexDataBuffer, GLES20.GL_STATIC_DRAW);
-        checkGLError("Vertex Buffer Binded");
-        GLES20.glVertexAttribPointer(mPositionHandle, mPositionDataSize, GLES20.GL_FLOAT,
-                false, mStrideBytes, 0);
-        GLES20.glEnableVertexAttribArray(mPositionHandle);
-        checkGLError("position Handle enabled");
-
-
-        // Set the active texture unit to texture unit 0.
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-        // Bind the texture to this unit.
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mSphereTextureDataHandle);
-        // Tell the texture uniform sampler to use this texture in the shader by binding to texture unit 0.
-        GLES20.glUniform1i(mUniformTextureHandle, 0);
-
-
-        GLES20.glGenBuffers(1, textureBuffers, 0);
-        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, textureBuffers[0]);
-        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, sphereBox.textureDataBuffer.capacity() * 4,
-                sphereBox.textureDataBuffer, GLES20.GL_STATIC_DRAW);
-        GLES20.glVertexAttribPointer(mTextureHandle, 2,
-                GLES20.GL_FLOAT, false, 8, 0);
-        GLES20.glEnableVertexAttribArray(mTextureHandle);
-        checkGLError("texture Handle Enabled");
-
-        GLES20.glGenBuffers(1, colorBuffers, 0);
-        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, colorBuffers[0]);
-        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, sphereBox.colorDataBuffer.capacity() * 4,
-                sphereBox.colorDataBuffer, GLES20.GL_STATIC_DRAW);
-        checkGLError("Color Buffer Binded");
-        GLES20.glVertexAttribPointer(mColorHandle, mColorDataSize, GLES20.GL_FLOAT,
-                false, 16, 0);
-        GLES20.glEnableVertexAttribArray(mColorHandle);
-        checkGLError("color Handle enabled");
-
-
-        GLES20.glGenBuffers(1, normalBuffers, 0);
-        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, normalBuffers[0]);
-        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, sphereBox.normalDataBuffer.capacity() * 4,
-                sphereBox.normalDataBuffer, GLES20.GL_STATIC_DRAW);
-        checkGLError("Normal Buffer Binded");
-        GLES20.glVertexAttribPointer(mNormalHandle, mPositionDataSize, GLES20.GL_FLOAT,
-                false, mStrideBytes, 0);
-        GLES20.glEnableVertexAttribArray(mNormalHandle);
-        checkGLError("Normal Handle enabled");
-
-
-        //Draw
-        GLES20.glGenBuffers(1, indexBuffers, 0);
-        GLES20.glBindBuffer(GLES20.GL_ELEMENT_ARRAY_BUFFER, indexBuffers[0]);
-        GLES20.glBufferData(GLES20.GL_ELEMENT_ARRAY_BUFFER, sphereBox.mIndexBuffer.capacity() * 2,
-                sphereBox.mIndexBuffer, GLES20.GL_STATIC_DRAW);
-        GLES20.glDrawElements(GLES20.GL_TRIANGLE_STRIP, SphereBox.NUM_INDICES, GLES20.GL_UNSIGNED_SHORT, 0);
-        checkGLError("Elements Drawn");
-
-        GLES20.glDisableVertexAttribArray(mTextureHandle);
-        GLES20.glDisableVertexAttribArray(mColorHandle);
-        GLES20.glDisableVertexAttribArray(mNormalHandle);
-        GLES20.glDisableVertexAttribArray(mPositionHandle);
-
-    }
-
-    private void loadVertexShader() {
-        // Load in the vertex shader.
-        vertexShaderHandle = GLES20.glCreateShader(GLES20.GL_VERTEX_SHADER);
-
-        if (vertexShaderHandle != 0) {
-            // Pass in the shader source.
-            GLES20.glShaderSource(vertexShaderHandle, vertexShader);
-
-            // Compile the shader.
-            GLES20.glCompileShader(vertexShaderHandle);
-
-            // Get the compilation status.
-            final int[] compileStatus = new int[1];
-            GLES20.glGetShaderiv(vertexShaderHandle, GLES20.GL_COMPILE_STATUS, compileStatus, 0);
-
-            // If the compilation failed, delete the shader.
-            if (compileStatus[0] == 0) {
-                GLES20.glDeleteShader(vertexShaderHandle);
-                vertexShaderHandle = 0;
-
-            }
-
-            if (vertexShaderHandle == 0) {
-                throw new RuntimeException("Error creating vertex shader.");
-            }
-
-        }
-    }
-
-    private void loadFragmentShader() {
-        // Load in the vertex shader.
-        fragmentShaderHandle = GLES20.glCreateShader(GLES20.GL_FRAGMENT_SHADER);
-
-        if (fragmentShaderHandle != 0) {
-            // Pass in the shader source.
-            GLES20.glShaderSource(fragmentShaderHandle, fragmentShader);
-
-            // Compile the shader.
-            GLES20.glCompileShader(fragmentShaderHandle);
-
-            // Get the compilation status.
-            final int[] compileStatus = new int[1];
-            GLES20.glGetShaderiv(fragmentShaderHandle, GLES20.GL_COMPILE_STATUS, compileStatus, 0);
-
-            // If the compilation failed, delete the shader.
-            if (compileStatus[0] == 0) {
-                GLES20.glDeleteShader(fragmentShaderHandle);
-                fragmentShaderHandle = 0;
-            }
-        }
-
-        if (fragmentShaderHandle == 0) {
-            throw new RuntimeException("Error creating fragment shader.");
-        }
-
-    }
-
-    private void linkVertexAndFragmentShaders() {
-        // Create a program object and store the handle to it.
-        programHandle = GLES20.glCreateProgram();
-
-        if (programHandle != 0) {
-            // Bind the vertex shader to the program.
-            GLES20.glAttachShader(programHandle, vertexShaderHandle);
-
-            // Bind the fragment shader to the program.
-            GLES20.glAttachShader(programHandle, fragmentShaderHandle);
-
-            // Bind attributes
-            GLES20.glBindAttribLocation(programHandle, 0, "a_Position");
-            GLES20.glBindAttribLocation(programHandle, 1, "a_Color");
-            GLES20.glBindAttribLocation(programHandle, 2, "a_Normal");
-            GLES20.glBindAttribLocation(programHandle, 3, "a_TexCoordinate");
-
-            // Link the two shaders together into a program.
-            GLES20.glLinkProgram(programHandle);
-
-            // Get the link status.
-            final int[] linkStatus = new int[1];
-            GLES20.glGetProgramiv(programHandle, GLES20.GL_LINK_STATUS, linkStatus, 0);
-
-            // If the link failed, delete the program.
-            if (linkStatus[0] == 0) {
-                GLES20.glDeleteProgram(programHandle);
-                programHandle = 0;
-            }
-        }
-
-        if (programHandle == 0) {
-            throw new RuntimeException("Error creating program.");
-        }
-    }
-
-    public void checkGLError(String where) {
-        int errorCode = GLES20.glGetError();
-        if (errorCode == 0)
-            Log.d("TAG", where + ": " + errorCode);
-        else {
-            Log.e("TAG", where + ": " + errorCode + GLU.gluErrorString(errorCode));
-        }
+        checkGLError(TAG, "View Matrix Setup");
+        nightSky.draw(mModelMatrix, mViewMatrix, mProjectionMatrix);
+        sphereBox.draw(mModelMatrix, mViewMatrix, mProjectionMatrix);
     }
 
     public float getAngle() {
@@ -470,17 +284,18 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
             Matrix.frustumM(mProjectionMatrix, 0, left, right, bottom, top, near, far);
 
         }
-        checkGLError("Projection Matrix Setup");
+        checkGLError(TAG, "Projection Matrix Setup");
 
 
         // Position the eye behind the origin.
         final float eyeX = 0.0f;
         final float eyeY = 0.0f;
-        final float eyeZ = 1.5f;
+        final float eyeZ = 3.5f;
+
         // We are looking toward the distance
         final float lookX = 0.0f;
         final float lookY = 0.0f;
-        final float lookZ = -1.0f;
+        final float lookZ = +2.0f;
         // Set our up vector. This is where our head would be pointing were we holding the camera.
         final float upX = 0.0f;
         final float upY = 1.0f;
@@ -489,15 +304,6 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
         Matrix.setLookAtM(mViewMatrix, 0, eyeX, eyeY, eyeZ, lookX, lookY, lookZ, upX, upY, upZ);
         Matrix.setIdentityM(mModelMatrix, 0);
         Matrix.setRotateM(mModelMatrix, 0, mAngle, 0.0f, 1.0f, 0.0f);
-        Matrix.multiplyMM(mMVMatrix, 0, mViewMatrix, 0, mModelMatrix, 0);
-
-        // This multiplies the modelview matrix by the projection matrix, and stores the result in the MVP matrix
-        // (which now contains model * view * projection).
-        Matrix.multiplyMM(mMVPMatrix, 0, mProjectionMatrix, 0, mMVMatrix, 0);
-        GLES20.glUniform3f(mLightPosHandle, lightSourcePosition[0], lightSourcePosition[1], lightSourcePosition[2]);
-        GLES20.glUniformMatrix4fv(mMVMatrixHandle, 1, false, mMVMatrix, 0);
-        GLES20.glUniformMatrix4fv(mMVPMatrixHandle, 1, false, mMVPMatrix, 0);
-
     }
 
 

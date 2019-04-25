@@ -141,7 +141,7 @@ public class PrismActivityRenderer implements GLSurfaceView.Renderer {
                 184.0f / 256.0f, 115.0f / 256.0f, 51.0f / 256.0f, 1.0f};
 
 
-        // Initialize the buffers.
+        // Initialize the bufferId.
         mTriangle1Vertices = ByteBuffer.allocateDirect(triangle1VerticesData.length * mBytesPerFloat)
                 .order(ByteOrder.nativeOrder()).asFloatBuffer();
         mTriangle1Vertices.put(triangle1VerticesData).position(0);

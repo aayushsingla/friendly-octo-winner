@@ -1,7 +1,8 @@
 package com.example.talkingplayer;
 
+import android.content.Context;
 import android.opengl.GLES20;
-import android.opengl.GLU;
+import android.opengl.Matrix;
 import android.util.Log;
 
 import java.nio.ByteBuffer;
@@ -9,34 +10,60 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.ShortBuffer;
 import java.util.Arrays;
-import java.util.Random;
+
+import static com.example.talkingplayer.SphereRenderer.checkGLError;
+import static com.example.talkingplayer.SphereRenderer.linkVertexAndFragmentShaders;
+import static com.example.talkingplayer.SphereRenderer.loadFragmentShader;
+import static com.example.talkingplayer.SphereRenderer.loadVertexShader;
 
 public class SphereBox {
+    private final static String TAG = SphereBox.class.getSimpleName();
     private static final short FLOATS_PER_VERTEX = 3;
     private static final short NUM_VERTICAL_BANDS = 36;
     private static final short NUM_STEPS_IN_BAND = 36;
     //first and last step will have just 1 vertices
-    public static final int NUM_VERTICES = ((NUM_VERTICAL_BANDS - 2) * NUM_STEPS_IN_BAND) + 2;
+    private static final int NUM_VERTICES = ((NUM_VERTICAL_BANDS - 2) * NUM_STEPS_IN_BAND) + 2;
     //First and last steps will have just 1 triangles.
     // So both combine to form one complete step.
     //VERTICES_FOR_TRIANGLE * NUMBER_OF_TRIANGLES_IN)SQUARE
     // * (NUMBER_OF_STEP*(NUMBER_OF_VERTICAL_BANDS-1-1))
-    public static final int NUM_INDICES = 3 * 2 * ((NUM_VERTICAL_BANDS - 2) * NUM_STEPS_IN_BAND);
+    private static final int NUM_INDICES = 3 * 2 * ((NUM_VERTICAL_BANDS - 2) * NUM_STEPS_IN_BAND);
     private static final short BYTES_PER_FLOAT = 4;
     private static final short BYTES_PER_SHORT = 2;
+    private final int mBytesPerFloat = 4;
+    private final int mStrideBytes = 3 * mBytesPerFloat;
+    private final int mPositionDataSize = 3;
+    private final int mColorDataSize = 4;
     private final float[] coordinateData = new float[FLOATS_PER_VERTEX * NUM_VERTICES];
     private final float[] textureData = new float[2 * NUM_VERTICES];
     private final float[] normalData = new float[FLOATS_PER_VERTEX * NUM_VERTICES];
     private final short[] indexData = new short[NUM_INDICES];
     private final float[] colorData = new float[4 * NUM_VERTICES];
-    public ShortBuffer mIndexBuffer = null;
-    public FloatBuffer vertexDataBuffer = null;
-    public FloatBuffer colorDataBuffer = null;
-    public FloatBuffer normalDataBuffer = null;
-    public FloatBuffer textureDataBuffer = null;
+    private final int[] bufferId = new int[5];
+
+    private ShortBuffer mIndexBuffer = null;
+    private FloatBuffer vertexDataBuffer = null;
+    private FloatBuffer colorDataBuffer = null;
+    private FloatBuffer normalDataBuffer = null;
+    private FloatBuffer textureDataBuffer = null;
+
+    private int mProgramHandle;
+    private int mMVPMatrixHandle;
+    private int mMVMatrixHandle;
+    private int mPositionHandle;
+    private int mColorHandle;
+    private int mTextureHandle;
+    private int mSphereTextureDataHandle;
+    private int mUniformTextureHandle;
+    private int mNormalHandle;
+    private int mLightPosHandle;
+
+    private float[] mMVPMatrix = new float[16];
+    private float[] mMVMatrix = new float[16];
+    private float[] lightSourcePosition = new float[]{0, 0, 0};
 
 
-    public SphereBox() {
+    public SphereBox(Context context, String vertexShader, String fragmentShader) {
         //Generating vertex array data
         //get angles for steps in band first
 
@@ -162,6 +189,65 @@ public class SphereBox {
         intializeIndexBuffer();
         intializeTextureDataBuffer();
 
+        mProgramHandle = linkVertexAndFragmentShaders(loadVertexShader(vertexShader),
+                loadFragmentShader(fragmentShader));
+
+        // Set program handles. These will later be used to pass in values to the program.
+        mMVPMatrixHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_MVPMatrix");
+        mMVMatrixHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_MVMatrix");
+        mPositionHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_Position");
+        mColorHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_Color");
+        mTextureHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_TexCoordinate");
+        mUniformTextureHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_Texture");
+        mNormalHandle = GLES20.glGetAttribLocation(mProgramHandle, "a_Normal");
+        mLightPosHandle = GLES20.glGetUniformLocation(mProgramHandle, "u_LightPos");
+        checkGLError(TAG, "Handles Created");
+        mSphereTextureDataHandle = SphereRenderer.loadTexture(context, R.drawable.texture);
+        checkGLError(TAG, "Texture Loaded");
+
+        GLES20.glEnableVertexAttribArray(mPositionHandle);
+        GLES20.glEnableVertexAttribArray(mColorHandle);
+        GLES20.glEnableVertexAttribArray(mNormalHandle);
+        GLES20.glEnableVertexAttribArray(mTextureHandle);
+
+        GLES20.glGenBuffers(5, bufferId, 0);
+
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, bufferId[0]);
+        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, vertexDataBuffer.capacity() * 4,
+                vertexDataBuffer, GLES20.GL_STATIC_DRAW);
+        checkGLError(TAG, "Vertex Buffer Binded");
+        GLES20.glVertexAttribPointer(mPositionHandle, mPositionDataSize, GLES20.GL_FLOAT,
+                false, mStrideBytes, 0);
+
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, bufferId[1]);
+        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, textureDataBuffer.capacity() * 4,
+                textureDataBuffer, GLES20.GL_STATIC_DRAW);
+        GLES20.glVertexAttribPointer(mTextureHandle, 2,
+                GLES20.GL_FLOAT, false, 8, 0);
+        checkGLError(TAG, "texture Handle Enabled");
+
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, bufferId[2]);
+        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, colorDataBuffer.capacity() * 4,
+                colorDataBuffer, GLES20.GL_STATIC_DRAW);
+        GLES20.glVertexAttribPointer(mColorHandle, mColorDataSize, GLES20.GL_FLOAT,
+                false, 16, 0);
+        checkGLError(TAG, "color Handle enabled");
+
+
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, bufferId[3]);
+        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, normalDataBuffer.capacity() * 4,
+                normalDataBuffer, GLES20.GL_STATIC_DRAW);
+        GLES20.glVertexAttribPointer(mNormalHandle, mPositionDataSize, GLES20.GL_FLOAT,
+                false, mStrideBytes, 0);
+        checkGLError(TAG, "Normal Handle enabled");
+
+        checkGLError(TAG, "Buffer Binding");
+
+        GLES20.glBindBuffer(GLES20.GL_ELEMENT_ARRAY_BUFFER, bufferId[4]);
+        GLES20.glBufferData(GLES20.GL_ELEMENT_ARRAY_BUFFER, mIndexBuffer.capacity() * 2,
+                mIndexBuffer, GLES20.GL_STATIC_DRAW);
+
+
     }
 
     private void intializeTextureDataBuffer() {
@@ -204,4 +290,44 @@ public class SphereBox {
         mIndexBuffer.put(indexData).position(0);
 
     }
+
+    public void draw(float[] mModelMatrix, float[] mViewMatrix, float[] mProjectionMatrix) {
+
+        // use the mProgramHandle for which everything has been set up in init
+        GLES20.glUseProgram(mProgramHandle);
+
+        // the only operation that need to be continuously done here
+        Matrix.multiplyMM(mMVMatrix, 0, mViewMatrix, 0, mModelMatrix, 0);
+        Matrix.multiplyMM(mMVPMatrix, 0, mProjectionMatrix, 0, mMVMatrix, 0);
+        GLES20.glUniform3f(mLightPosHandle, lightSourcePosition[0], lightSourcePosition[1], lightSourcePosition[2]);
+        GLES20.glUniformMatrix4fv(mMVMatrixHandle, 1, false, mMVMatrix, 0);
+        GLES20.glUniformMatrix4fv(mMVPMatrixHandle, 1, false, mMVPMatrix, 0);
+
+        //Draw
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, bufferId[0]);
+        GLES20.glVertexAttribPointer(mPositionHandle, mPositionDataSize, GLES20.GL_FLOAT,
+                false, mStrideBytes, 0);
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, bufferId[1]);
+        GLES20.glVertexAttribPointer(mTextureHandle, 2,
+                GLES20.GL_FLOAT, false, 8, 0);
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, bufferId[2]);
+        GLES20.glVertexAttribPointer(mColorHandle, mColorDataSize, GLES20.GL_FLOAT,
+                false, 16, 0);
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, bufferId[3]);
+        GLES20.glVertexAttribPointer(mNormalHandle, mPositionDataSize, GLES20.GL_FLOAT,
+                false, mStrideBytes, 0);
+
+        // Set the active texture unit to texture unit 0.
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        // Bind the texture to this unit.
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mSphereTextureDataHandle);
+        // Tell the texture uniform sampler to use this texture in the shader by binding to texture unit 0.
+        GLES20.glUniform1i(mUniformTextureHandle, 0);
+
+        GLES20.glBindBuffer(GLES20.GL_ELEMENT_ARRAY_BUFFER, bufferId[4]);
+        GLES20.glDrawElements(GLES20.GL_TRIANGLE_STRIP, SphereBox.NUM_INDICES, GLES20.GL_UNSIGNED_SHORT, 0);
+        checkGLError(TAG, "Elements Drawn");
+    }
+
+
 }
