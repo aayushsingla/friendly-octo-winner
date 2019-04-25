@@ -7,6 +7,7 @@ import android.opengl.GLSurfaceView;
 import android.os.Bundle;
 import android.app.Activity;
 import android.view.View;
+import android.view.WindowManager;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
@@ -22,6 +23,7 @@ public class SphereActivity extends Activity {
         setContentView(R.layout.activity_sphere);
         ButterKnife.bind(this);
         glSurfaceView = new GLSurfaceViewSphere(this);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
         setContentView(glSurfaceView);
 
