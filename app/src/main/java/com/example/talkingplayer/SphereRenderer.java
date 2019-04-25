@@ -14,11 +14,12 @@ import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
 public class SphereRenderer implements GLSurfaceView.Renderer {
-    public final int[] vertexBuffers = new int[1];
-    public final int[] indexBuffers = new int[1];
-    public final int[] normalBuffers = new int[1];
-    public final int[] colorBuffers = new int[1];
-    public final int[] textureBuffers = new int[1];
+    public final int[] vertexBuffers = new int[2];
+    public final int[] indexBuffers = new int[2];
+    public final int[] normalBuffers = new int[2];
+    public final int[] colorBuffers = new int[2];
+    public final int[] textureBuffers = new int[2];
+
     final String fragmentShader =
             "precision mediump float;       \n"        // Set the default precision to medium. We don't need as high of a
                     // precision in the fragment shader.
@@ -89,7 +90,8 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
     private int mPositionHandle;
     private int mColorHandle;
     private int mTextureHandle;
-    private int mTextureDataHandle;
+    private int mSphereTextureDataHandle;
+    private int mSkyTextureDataHandle;
     private int mUniformTextureHandle;
     private int mNormalHandle;
     private int mLightPosHandle;
@@ -103,11 +105,12 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
     private volatile float mScaleFactor = 1.0f;
     private float ratio;
     private SphereBox sphereBox;
+    private NightSky nightSky;
 
     public SphereRenderer(Context context) {
-        lightSourcePosition[0] = 1.5f;
-        lightSourcePosition[1] = 1.5f;
-        lightSourcePosition[2] = 1.5f;
+        lightSourcePosition[0] = 0.0f;
+        lightSourcePosition[1] = 0.0f;
+        lightSourcePosition[2] = 0.0f;
 
         this.context = context;
     }
@@ -146,11 +149,23 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
     }
 
     @Override
+    public void onSurfaceChanged(GL10 gl10, int width, int height) {
+        // Set the OpenGL viewport to the same size as the surface.
+        GLES20.glViewport(0, 0, width, height);
+
+        // Create a new perspective projection matrix. The height will stay the same
+        // while the width will vary as per aspect ratio.
+        ratio = (float) width / height;
+
+    }
+
+    @Override
     public void onSurfaceCreated(GL10 gl10, EGLConfig eglConfig) {
         GLES20.glEnable(GLES20.GL_DITHER);
         GLES20.glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
         GLES20.glEnable(GLES20.GL_DEPTH_TEST);
         sphereBox = new SphereBox();
+        nightSky = new NightSky();
 
         loadVertexShader();
         checkGLError("Vertex Shader Attached");
@@ -172,21 +187,11 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
         mNormalHandle = GLES20.glGetAttribLocation(programHandle, "a_Normal");
         mLightPosHandle = GLES20.glGetUniformLocation(programHandle, "u_LightPos");
         checkGLError("Handles Created");
-        mTextureDataHandle = loadTexture(context, R.drawable.texture);
+        mSphereTextureDataHandle = loadTexture(context, R.drawable.texture);
+        mSkyTextureDataHandle = loadTexture(context, R.drawable.night_sky);
         checkGLError("Texture Loaded");
         // Tell OpenGL to use this program when rendering.
         GLES20.glUseProgram(programHandle);
-
-    }
-
-    @Override
-    public void onSurfaceChanged(GL10 gl10, int width, int height) {
-        // Set the OpenGL viewport to the same size as the surface.
-        GLES20.glViewport(0, 0, width, height);
-
-        // Create a new perspective projection matrix. The height will stay the same
-        // while the width will vary as per aspect ratio.
-        ratio = (float) width / height;
 
     }
 
@@ -195,10 +200,78 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
         GLES20.glClear(GLES20.GL_DEPTH_BUFFER_BIT | GLES20.GL_COLOR_BUFFER_BIT);
 
 //         Bind Attributes
-
         setUpViewMatrix();
         checkGLError("View Matrix Setup");
+        drawNightSky();
+        drawPlanet();
+    }
 
+    private void drawNightSky() {
+        GLES20.glGenBuffers(1, vertexBuffers, 1);
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vertexBuffers[1]);
+        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, nightSky.coordinateDataBuffer.capacity() * 4,
+                nightSky.coordinateDataBuffer, GLES20.GL_STATIC_DRAW);
+        checkGLError("Vertex Buffer Binded");
+        GLES20.glVertexAttribPointer(mPositionHandle, mPositionDataSize, GLES20.GL_FLOAT,
+                false, mStrideBytes, 0);
+        GLES20.glEnableVertexAttribArray(mPositionHandle);
+        checkGLError("position Handle enabled");
+
+
+        // Set the active texture unit to texture unit 0.
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
+        // Bind the texture to this unit.
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mSkyTextureDataHandle);
+        // Tell the texture uniform sampler to use this texture in the shader by binding to texture unit 0.
+        GLES20.glUniform1i(mUniformTextureHandle, 0);
+
+
+        GLES20.glGenBuffers(1, textureBuffers, 1);
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, textureBuffers[1]);
+        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, nightSky.textureDataBuffer.capacity() * 4,
+                nightSky.textureDataBuffer, GLES20.GL_STATIC_DRAW);
+        GLES20.glVertexAttribPointer(mTextureHandle, 2,
+                GLES20.GL_FLOAT, false, 8, 0);
+        GLES20.glEnableVertexAttribArray(mTextureHandle);
+        checkGLError("texture Handle Enabled");
+
+        GLES20.glGenBuffers(1, normalBuffers, 1);
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, normalBuffers[1]);
+        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, nightSky.normalDataBuffer.capacity() * 4,
+                nightSky.normalDataBuffer, GLES20.GL_STATIC_DRAW);
+        checkGLError("Normal Buffer Binded");
+        GLES20.glVertexAttribPointer(mNormalHandle, mPositionDataSize, GLES20.GL_FLOAT,
+                false, mStrideBytes, 0);
+        GLES20.glEnableVertexAttribArray(mNormalHandle);
+        checkGLError("Normal Handle enabled");
+
+        GLES20.glGenBuffers(1, colorBuffers, 1);
+        GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, colorBuffers[1]);
+        GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, nightSky.colorDataBuffer.capacity() * 4,
+                nightSky.colorDataBuffer, GLES20.GL_STATIC_DRAW);
+        checkGLError("Color Buffer Binded");
+        GLES20.glVertexAttribPointer(mColorHandle, mColorDataSize, GLES20.GL_FLOAT,
+                false, 16, 0);
+        GLES20.glEnableVertexAttribArray(mColorHandle);
+        checkGLError("color Handle enabled");
+
+
+        //Draw
+        GLES20.glGenBuffers(1, indexBuffers, 1);
+        GLES20.glBindBuffer(GLES20.GL_ELEMENT_ARRAY_BUFFER, indexBuffers[1]);
+        GLES20.glBufferData(GLES20.GL_ELEMENT_ARRAY_BUFFER, nightSky.indicesDataBuffer.capacity() * 2,
+                nightSky.indicesDataBuffer, GLES20.GL_STATIC_DRAW);
+        GLES20.glDrawElements(GLES20.GL_TRIANGLE_STRIP, nightSky.indicesDataBuffer.capacity(),
+                GLES20.GL_UNSIGNED_SHORT, 0);
+        checkGLError("Night Sky Drawn");
+
+        GLES20.glDisableVertexAttribArray(mTextureHandle);
+        GLES20.glDisableVertexAttribArray(mColorHandle);
+        GLES20.glDisableVertexAttribArray(mNormalHandle);
+        GLES20.glDisableVertexAttribArray(mPositionHandle);
+    }
+
+    private void drawPlanet() {
         GLES20.glGenBuffers(1, vertexBuffers, 0);
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vertexBuffers[0]);
         GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, sphereBox.vertexDataBuffer.capacity() * 4,
@@ -213,7 +286,7 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
         // Set the active texture unit to texture unit 0.
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
         // Bind the texture to this unit.
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mTextureDataHandle);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mSphereTextureDataHandle);
         // Tell the texture uniform sampler to use this texture in the shader by binding to texture unit 0.
         GLES20.glUniform1i(mUniformTextureHandle, 0);
 
@@ -256,54 +329,11 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
                 sphereBox.mIndexBuffer, GLES20.GL_STATIC_DRAW);
         GLES20.glDrawElements(GLES20.GL_TRIANGLE_STRIP, SphereBox.NUM_INDICES, GLES20.GL_UNSIGNED_SHORT, 0);
         checkGLError("Elements Drawn");
-    }
 
-    private void setUpViewMatrix() {
-        if (ratio > 1) {
-            final float left = -ratio / mScaleFactor;
-            final float right = ratio / mScaleFactor;
-            final float bottom = -1.0f / mScaleFactor;
-            final float top = 1.0f / mScaleFactor;
-            final float near = 1.0f;
-            final float far = 10.0f;
-            Matrix.frustumM(mProjectionMatrix, 0, left, right, bottom, top, near, far);
-        } else {
-            final float top = 1 / (ratio * mScaleFactor);
-            final float bottom = -1 * (top);
-            final float left = -1.0f / mScaleFactor;
-            final float right = 1.0f / mScaleFactor;
-            final float near = 1.0f;
-            final float far = 10.0f;
-            Matrix.frustumM(mProjectionMatrix, 0, left, right, bottom, top, near, far);
-
-        }
-        checkGLError("Projection Matrix Setup");
-
-
-        // Position the eye behind the origin.
-        final float eyeX = 0.0f;
-        final float eyeY = 0.0f;
-        final float eyeZ = -1.5f;
-        // We are looking toward the distance
-        final float lookX = 0.0f;
-        final float lookY = 0.0f;
-        final float lookZ = 0.0f;
-        // Set our up vector. This is where our head would be pointing were we holding the camera.
-        final float upX = 0.0f;
-        final float upY = 1.0f;
-        final float upZ = 0.0f;
-
-        Matrix.setLookAtM(mViewMatrix, 0, eyeX, eyeY, eyeZ, lookX, lookY, lookZ, upX, upY, upZ);
-        Matrix.setIdentityM(mModelMatrix, 0);
-        Matrix.setRotateM(mModelMatrix, 0, mAngle, 0.0f, 1.0f, 0.0f);
-        Matrix.multiplyMM(mMVMatrix, 0, mViewMatrix, 0, mModelMatrix, 0);
-
-        // This multiplies the modelview matrix by the projection matrix, and stores the result in the MVP matrix
-        // (which now contains model * view * projection).
-        Matrix.multiplyMM(mMVPMatrix, 0, mProjectionMatrix, 0, mMVMatrix, 0);
-        GLES20.glUniform3f(mLightPosHandle, lightSourcePosition[0], lightSourcePosition[1], lightSourcePosition[2]);
-        GLES20.glUniformMatrix4fv(mMVMatrixHandle, 1, false, mMVMatrix, 0);
-        GLES20.glUniformMatrix4fv(mMVPMatrixHandle, 1, false, mMVPMatrix, 0);
+        GLES20.glDisableVertexAttribArray(mTextureHandle);
+        GLES20.glDisableVertexAttribArray(mColorHandle);
+        GLES20.glDisableVertexAttribArray(mNormalHandle);
+        GLES20.glDisableVertexAttribArray(mPositionHandle);
 
     }
 
@@ -420,4 +450,55 @@ public class SphereRenderer implements GLSurfaceView.Renderer {
     public void setZoom(float mScaleFactor) {
         this.mScaleFactor = mScaleFactor;
     }
+
+    private void setUpViewMatrix() {
+        if (ratio > 1) {
+            final float left = -ratio / mScaleFactor;
+            final float right = ratio / mScaleFactor;
+            final float bottom = -1.0f / mScaleFactor;
+            final float top = 1.0f / mScaleFactor;
+            final float near = 1.0f;
+            final float far = 10.0f;
+            Matrix.frustumM(mProjectionMatrix, 0, left, right, bottom, top, near, far);
+        } else {
+            final float top = 1 / (ratio * mScaleFactor);
+            final float bottom = -1 * (top);
+            final float left = -1.0f / mScaleFactor;
+            final float right = 1.0f / mScaleFactor;
+            final float near = 1.0f;
+            final float far = 10.0f;
+            Matrix.frustumM(mProjectionMatrix, 0, left, right, bottom, top, near, far);
+
+        }
+        checkGLError("Projection Matrix Setup");
+
+
+        // Position the eye behind the origin.
+        final float eyeX = 0.0f;
+        final float eyeY = 0.0f;
+        final float eyeZ = 1.5f;
+        // We are looking toward the distance
+        final float lookX = 0.0f;
+        final float lookY = 0.0f;
+        final float lookZ = -1.0f;
+        // Set our up vector. This is where our head would be pointing were we holding the camera.
+        final float upX = 0.0f;
+        final float upY = 1.0f;
+        final float upZ = 0.0f;
+
+        Matrix.setLookAtM(mViewMatrix, 0, eyeX, eyeY, eyeZ, lookX, lookY, lookZ, upX, upY, upZ);
+        Matrix.setIdentityM(mModelMatrix, 0);
+        Matrix.setRotateM(mModelMatrix, 0, mAngle, 0.0f, 1.0f, 0.0f);
+        Matrix.multiplyMM(mMVMatrix, 0, mViewMatrix, 0, mModelMatrix, 0);
+
+        // This multiplies the modelview matrix by the projection matrix, and stores the result in the MVP matrix
+        // (which now contains model * view * projection).
+        Matrix.multiplyMM(mMVPMatrix, 0, mProjectionMatrix, 0, mMVMatrix, 0);
+        GLES20.glUniform3f(mLightPosHandle, lightSourcePosition[0], lightSourcePosition[1], lightSourcePosition[2]);
+        GLES20.glUniformMatrix4fv(mMVMatrixHandle, 1, false, mMVMatrix, 0);
+        GLES20.glUniformMatrix4fv(mMVPMatrixHandle, 1, false, mMVPMatrix, 0);
+
+    }
+
+
 }
